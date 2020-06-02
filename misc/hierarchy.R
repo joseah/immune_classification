@@ -21,7 +21,20 @@ trainTree <- function(tree, data, pVar = 'cell_type', verbose = FALSE){
     
     labels <- data@meta.data[[pVar]]
     
-    # First we do PCA for the root node
+    tree = trainNode(tree, data, pVar, verbose)
+        
+    mylist <- list('tree' = tree, 'data' = data)
+    return(mylist)
+}
+
+
+# Iterate over the nodes recursively
+trainNode <- function(tree, data, pVar, verbose){
+    
+    print(tree$name)
+    
+    labels <- data@meta.data[[pVar]]
+    
     data <- doPCA(data, verbose)
     tree$loadings <- Loadings(data, reduction = 'pca')
     
@@ -34,6 +47,8 @@ trainTree <- function(tree, data, pVar = 'cell_type', verbose = FALSE){
         # idxChildren, positive samples (including node itself)
         # rest, negative samples
         # Train classifier here
+        # c$PCs <- function to find variable pcs
+        # c$classifier <- function to train the classifier
         
         # If c is not a leaf node, do PCA and continue with children
         if(!isLeaf(c)){
@@ -41,25 +56,23 @@ trainTree <- function(tree, data, pVar = 'cell_type', verbose = FALSE){
             # Get subset of the data
             dataSubset <- subset(data, cells = idxChildren)
             
-            # Do PCA on this subset
-            dataSubset <- doPCA(dataSubset, verbose)
-            c$loadings <- Loadings(dataSubset, reduction = 'pca')
+            # Do PCA on this node and continue with children
+            c = trainNode(c, dataSubset, pVar, verbose)
             
-            # Continue with the children
             
+            tree$c = c
         }
-                
     }
+        
+    tree    
     
-    mylist <- list('tree' = tree, 'data' = data)
-    return(mylist)
 }
 
 
 doPCA <- function(data, verbose){
     
     if(ncol(data) < 100){
-        npcs <- ncol(data) - 2
+        npcs <- ncol(data) - 5
     } else {
         npcs <- 100
     }
@@ -72,7 +85,6 @@ doPCA <- function(data, verbose){
     
     data
 }
-
 # small test seuratobject (downsampled 68k)
 pbmc <- readRDS('../68K/small68k.rds')
 pbmc[['pca']] <- NULL
