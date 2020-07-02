@@ -32,37 +32,36 @@ trainNode <- function(tree, data, pVar, verbose){
   
   cat("Training parent node: ", tree$name, "\n", sep = "")
   
-  labels <- data@meta.data[[pVar]]
-  
   data <- doPCA(data)
+  labels <- data@meta.data[[pVar]]
+  newLabels <- labels
   
-  #c <- tree$children[[1]]
-  flag <- 1
+  ## First rewrite the labels 
   for(c in tree$children){
     
-    if(flag){
-      
-      # Cell types
-      namesChildren <- as.vector(tree$Get('name')) 
-      idxChildren <- labels %in% namesChildren
-      
-      # idxChildren, positive samples (including node itself)
-      # rest, negative samples
-      # Train classifier here
-      response <- vector("character", ncol(data))
-      cat("Children: ", c$name, ", ", c$siblings[[1]]$name, "\n", sep = "")
-      response[idxChildren] <- c$name
-      response[!idxChildren] <- c$siblings[[1]]$name
-      data$response <- response
-      
-      data <- getFeatureSpace(data, pvar = "response")
-      data <- trainModel(data)
-      model <- data@misc$scPred
-      tree$model <- model
-    }
-    flag <- 0
-    # If c is not a leaf node, do PCA and continue with children
+    namesChildren <- as.vector(c$Get('name')) 
+    idxChildren <- labels %in% namesChildren
+    
+    newLabels[idxChildren] <- c$name
+    
+  }
+  
+  data$response = newLabels
+  
+  cat("Cell types in this layer of the tree:", unique(newLabels), "\n", sep = " ")
+
+  ## get informative PCs and train classifier
+  data <- getFeatureSpace(data, pvar = "response")
+  data <- trainModel(data)
+  model <- data@misc$scPred
+  tree$model <- model
+  
+  ## Continue to children if they are not a leaf
+  for(c in tree$children){
+    
     if(!isLeaf(c)){
+      namesChildren <- as.vector(c$Get('name')) 
+      idxChildren <- labels %in% namesChildren
       
       # Get subset of the data
       dataSubset <- subset(data, cells = Cells(data)[idxChildren])
@@ -70,8 +69,8 @@ trainNode <- function(tree, data, pVar, verbose){
       # Do PCA on this node and continue with children
       trainNode(c, dataSubset, pVar, verbose)
       
-      
     }
+    
   }
   
   tree    
@@ -93,9 +92,11 @@ doPCA <- function(data, verbose = FALSE){
   
   data
 }
+
+
 # small test seuratobject (downsampled 68k)
-#pbmc <- readRDS('../68K/small68k.rds')
-data <- readRDS("../immune_prediction/results/2020-04-14_68k_annotation/68k_annotated.RDS")
+data <- readRDS('../68K/68k_corr.RDS')
+# data <- readRDS("../immune_prediction/results/2020-04-14_68k_annotation/68k_annotated.RDS")
 set.seed(66)
 i <- sample(seq_len(nrow(data)), size = 3000)
 data <- data[,i]
@@ -110,6 +111,7 @@ hier <- c("pbmc/Myeloid/DC/mDCs",
           "pbmc/Myeloid/Monocyte/CD16+ Monocytes",
           "pbmc/Myeloid/Monocyte/CD14+ Monocytes",
           "pbmc/Lymphoid/B cells",
+          "pbmc/Lymphoid/Plasma",
           "pbmc/Lymphoid/NKT cell/T cell/CD8+ T cell",
           "pbmc/Lymphoid/NKT cell/T cell/CD4+ T cell",
           "pbmc/Lymphoid/NKT cell/Natural Killer")
@@ -126,32 +128,43 @@ new <- data
 tree <- test
 template <- Clone(tree)
 
+
+predictTree <- function(tree, template, newData){
+  
+  newData <- predictNode(tree, template, newData)
+  
+  newData
+  
+}
+
 # Iterate over the nodes recursively
-predict_tree <- function(tree, template, data){
+predictNode <- function(tree, template, newData){
   
   # Make predictions  
-  new <- scPredict(new, tree$model)
+  newData <- scPredict(newData, tree$model)
   
   # Assign cells to parent node if they are unassigned
-  new$scpred_prediction <- if_else(new$scpred_prediction == "unassigned", tree$name, new$scpred_prediction)
+  newData$scpred_prediction <- if_else(newData$scpred_prediction == "unassigned", tree$name, newData$scpred_prediction)
   
   for(c in tree$children){
     
     # If c is not a leaf node, continue with predictions
     if(!isLeaf(c)){
-      s <- SplitObject(new, "scpred_prediction")
+      # s <- SplitObject(new, "scpred_prediction")
       
       # Get subset of the data
-      dataSubset <- subset(data, cells = Cells(data)[idxChildren])
+      namesChildren <- as.vector(c$Get('name')) 
+      idxChildren <- newData$scpred_prediction %in% namesChildren
+      dataSubset <- subset(newData, cells = Cells(newData)[idxChildren])
       
-      # Do PCA on this node and continue with children
-      c <-  predict_tree(c, dataSubset, pVar, verbose)
+      # Predict the labels of these cells
+      dataSubset <- predictNode(c, template, dataSubset)
       
+      newData$scpred_prediction[idxChildren] <- dataSubset$scpred_prediction 
       
-      tree$c <-  c
     }
   }
   
-  tree    
+  newData    
   
 }
