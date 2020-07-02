@@ -68,10 +68,9 @@ trainNode <- function(tree, data, pVar, verbose){
       dataSubset <- subset(data, cells = Cells(data)[idxChildren])
       
       # Do PCA on this node and continue with children
-      c <-  trainNode(c, dataSubset, pVar, verbose)
+      trainNode(c, dataSubset, pVar, verbose)
       
       
-      tree$c <-  c
     }
   }
   
@@ -121,8 +120,6 @@ DefaultAssay(data) <- "RNA"
 
 # 'train' the tree 
 tree <- trainTree(h, data)
-
-
 
 
 new <- data
