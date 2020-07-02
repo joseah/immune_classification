@@ -30,31 +30,37 @@ trainTree <- function(tree, data, pVar = 'cell_type', verbose = FALSE){
 # Iterate over the nodes recursively
 trainNode <- function(tree, data, pVar, verbose){
   
-  print(tree$name)
+  cat("Training parent node: ", tree$name, "\n", sep = "")
   
   labels <- data@meta.data[[pVar]]
   
   data <- doPCA(data)
-
+  
+  #c <- tree$children[[1]]
+  flag <- 1
   for(c in tree$children){
     
-    # Cell types
-    namesChildren <- as.vector(c$Get('name')) 
-    idxChildren <- labels %in% namesChildren
-    
-    # idxChildren, positive samples (including node itself)
-    # rest, negative samples
-    # Train classifier here
-    response <- vector("character",  ncol(data))
-    response[idxChildren] <- c$name
-    response[!idxChildren] <- c$siblings[[1]]$name
-    data$response <- response
-    
-    data <- getFeatureSpace(data, pvar = "response")
-    data <- trainModel(data)
-    model <- data@misc$scPred
-    tree$model <- model
-    
+    if(flag){
+      
+      # Cell types
+      namesChildren <- as.vector(tree$Get('name')) 
+      idxChildren <- labels %in% namesChildren
+      
+      # idxChildren, positive samples (including node itself)
+      # rest, negative samples
+      # Train classifier here
+      response <- vector("character", ncol(data))
+      cat("Children: ", c$name, ", ", c$siblings[[1]]$name, "\n", sep = "")
+      response[idxChildren] <- c$name
+      response[!idxChildren] <- c$siblings[[1]]$name
+      data$response <- response
+      
+      data <- getFeatureSpace(data, pvar = "response")
+      data <- trainModel(data)
+      model <- data@misc$scPred
+      tree$model <- model
+    }
+    flag <- 0
     # If c is not a leaf node, do PCA and continue with children
     if(!isLeaf(c)){
       
@@ -76,13 +82,11 @@ trainNode <- function(tree, data, pVar, verbose){
 
 doPCA <- function(data, verbose = FALSE){
   
-  if(ncol(data) < 100){
-    npcs <- ncol(data) - 5
+  if(ncol(data) < 50){
+    npcs <- ncol(data) - 2
   } else {
     npcs <- 50
   }
-  
-  print(npcs)
   
   data <- FindVariableFeatures(data, verbose = verbose)
   data <- ScaleData(data, verbose = verbose)
@@ -118,6 +122,9 @@ DefaultAssay(data) <- "RNA"
 # 'train' the tree 
 tree <- trainTree(h, data)
 
+
+
+
 new <- data
 tree <- test
 template <- Clone(tree)
@@ -130,7 +137,7 @@ predict_tree <- function(tree, template, data){
   
   # Assign cells to parent node if they are unassigned
   new$scpred_prediction <- if_else(new$scpred_prediction == "unassigned", tree$name, new$scpred_prediction)
-
+  
   for(c in tree$children){
     
     # If c is not a leaf node, continue with predictions
