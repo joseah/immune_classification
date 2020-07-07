@@ -18,17 +18,17 @@ createTree <- function(stringTree){
 # data = seuratobject of the reference to use for training
 # pVar = name of the column of the metadata used as labels
 
-trainTree <- function(tree, data, pVar = 'cell_type', verbose = FALSE){
+trainTree <- function(tree, data, pVar = 'cell_type', reduction = 'pca', verbose = FALSE){
   
   labels <- data@meta.data[[pVar]]
   
-  tree <-  trainNode(tree, data, pVar, verbose)
+  tree <-  trainNode(tree, data, pVar, reduction, verbose)
   tree
 }
 
 
 # Iterate over the nodes recursively
-trainNode <- function(tree, data, pVar, verbose){
+trainNode <- function(tree, data, pVar, reduction, verbose){
   
   cat("Training parent node: ", tree$name, "\n", sep = "")
   
@@ -49,10 +49,13 @@ trainNode <- function(tree, data, pVar, verbose){
   data$response = newLabels
   
   cat("Cell types in this layer of the tree:", unique(newLabels), "\n", sep = " ")
-
+  cat(reduction)
   ## get informative PCs and train classifier
-  data <- getFeatureSpace(data, pvar = "response")
+  data <- getFeatureSpace(data, pvar = "response", reduction = reduction)
   data <- trainModel(data)
+  
+  cat("Model trained")
+  
   model <- data@misc$scPred
   tree$model <- model
   
@@ -67,7 +70,7 @@ trainNode <- function(tree, data, pVar, verbose){
       dataSubset <- subset(data, cells = Cells(data)[idxChildren])
       
       # Do PCA on this node and continue with children
-      trainNode(c, dataSubset, pVar, verbose)
+      trainNode(c, dataSubset, pVar, reduction, verbose)
       
     }
     
@@ -94,54 +97,19 @@ doPCA <- function(data, verbose = FALSE){
 }
 
 
-# small test seuratobject (downsampled 68k)
-data <- readRDS('../68K/68k_corr.RDS')
-# data <- readRDS("../immune_prediction/results/2020-04-14_68k_annotation/68k_annotated.RDS")
-set.seed(66)
-i <- sample(seq_len(nrow(data)), size = 3000)
-data <- data[,i]
-
-
-data[['pca']] <- NULL
-data[['umap']] <- NULL
-
-# create the tree
-hier <- c("pbmc/Myeloid/DC/mDCs",
-          "pbmc/Myeloid/DC/pDC",
-          "pbmc/Myeloid/Monocyte/CD16+ Monocytes",
-          "pbmc/Myeloid/Monocyte/CD14+ Monocytes",
-          "pbmc/Lymphoid/B cells",
-          "pbmc/Lymphoid/Plasma",
-          "pbmc/Lymphoid/NKT cell/T cell/CD8+ T cell",
-          "pbmc/Lymphoid/NKT cell/T cell/CD4+ T cell",
-          "pbmc/Lymphoid/NKT cell/Natural Killer")
-
-h <- createTree(hier)
-
-DefaultAssay(data) <- "RNA"
-
-# 'train' the tree 
-tree <- trainTree(h, data)
-
-
-new <- data
-tree <- test
-template <- Clone(tree)
-
-
-predictTree <- function(tree, template, newData){
+predictTree <- function(tree, template, newData, recompute_alignment = TRUE){
   
-  newData <- predictNode(tree, template, newData)
+  newData <- predictNode(tree, template, newData, recompute_alignment)
   
   newData
   
 }
 
 # Iterate over the nodes recursively
-predictNode <- function(tree, template, newData){
+predictNode <- function(tree, template, newData, recompute_alignment){
   
   # Make predictions  
-  newData <- scPredict(newData, tree$model)
+  newData <- scPredict(newData, tree$model, recompute_alignment = recompute_alignment)
   
   # Assign cells to parent node if they are unassigned
   newData$scpred_prediction <- if_else(newData$scpred_prediction == "unassigned", tree$name, newData$scpred_prediction)
@@ -158,7 +126,7 @@ predictNode <- function(tree, template, newData){
       dataSubset <- subset(newData, cells = Cells(newData)[idxChildren])
       
       # Predict the labels of these cells
-      dataSubset <- predictNode(c, template, dataSubset)
+      dataSubset <- predictNode(c, template, dataSubset, recompute_alignment)
       
       newData$scpred_prediction[idxChildren] <- dataSubset$scpred_prediction 
       
@@ -168,3 +136,51 @@ predictNode <- function(tree, template, newData){
   newData    
   
 }
+
+
+
+# small test seuratobject (downsampled 68k)
+# data <- readRDS('../68K/68k_corr.RDS')
+# data <- readRDS("../immune_prediction/results/2020-04-14_68k_annotation/68k_annotated.RDS")
+reference <- readRDS('../citeseq/5k_v3_aligned2.RDS')
+new <- readRDS('../citeseq/5k_v3_nextgem_aligned2.RDS')
+
+# set.seed(66)
+# i <- sample(seq_len(nrow(data)), size = 3000)
+# data <- data[,i]
+# 
+# 
+# data[['pca']] <- NULL
+# data[['umap']] <- NULL
+
+# create the tree
+# hier <- c("pbmc/Myeloid/DC/mDCs",
+#           "pbmc/Myeloid/DC/pDC",
+#           "pbmc/Myeloid/Monocyte/CD16+ Monocytes",
+#           "pbmc/Myeloid/Monocyte/CD14+ Monocytes",
+#           "pbmc/Lymphoid/B cells",
+#           "pbmc/Lymphoid/Plasma",
+#           "pbmc/Lymphoid/NKT cell/T cell/CD8+ T cell",
+#           "pbmc/Lymphoid/NKT cell/T cell/CD4+ T cell",
+#           "pbmc/Lymphoid/NKT cell/Natural Killer")
+
+hier <- c("pbmc/Myeloid/DC/cDC",
+          "pbmc/Myeloid/DC/pDC",
+          "pbmc/Myeloid/Monocyte/C Monocyte",
+          "pbmc/Myeloid/Monocyte/NC-Int Monocyte",
+          "pbmc/Lymphoid/B cell",
+          "pbmc/Lymphoid/NK and T cell/T cell/CD8+ T cell",
+          "pbmc/Lymphoid/NK and T cell/T cell/CD4+ T cell",
+          "pbmc/Lymphoid/NK and T cell/T cell/gd T cell",
+          "pbmc/Lymphoid/NK and T cell/NK cell",
+          "pbmc/Lymphoid/NK and T cell/NKT cell")
+
+h <- createTree(hier)
+
+# DefaultAssay(data) <- "RNA"
+
+# 'train' the tree 
+tree <- trainTree(h, reference, pVar = 'labels')
+
+
+predictions <- predictTree(h, 0, new, recompute_alignment = TRUE)
