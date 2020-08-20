@@ -18,17 +18,17 @@ createTree <- function(stringTree){
 # data = seuratobject of the reference to use for training
 # pVar = name of the column of the metadata used as labels
 
-trainTree <- function(tree, data, pVar = 'cell_type', reduction = 'pca', verbose = FALSE){
+trainTree <- function(tree, data, pVar = 'cell_type', reduction = 'pca', verbose = FALSE, modelName = 'svmRadial'){
   
   labels <- data@meta.data[[pVar]]
   
-  tree <-  trainNode(tree, data, pVar, reduction, verbose)
+  tree <-  trainNode(tree, data, pVar, reduction, verbose, modelName)
   tree
 }
 
 
 # Iterate over the nodes recursively
-trainNode <- function(tree, data, pVar, reduction, verbose){
+trainNode <- function(tree, data, pVar, reduction, verbose, modelName){
   
   cat("Training parent node: ", tree$name, "\n", sep = "")
   
@@ -52,7 +52,7 @@ trainNode <- function(tree, data, pVar, reduction, verbose){
   cat(reduction)
   ## get informative PCs and train classifier
   data <- getFeatureSpace(data, pvar = "response", reduction = reduction)
-  data <- trainModel(data)
+  data <- trainModel(data, model = modelName)
   
   cat("Model trained")
   
@@ -70,7 +70,7 @@ trainNode <- function(tree, data, pVar, reduction, verbose){
       dataSubset <- subset(data, cells = Cells(data)[idxChildren])
       
       # Do PCA on this node and continue with children
-      trainNode(c, dataSubset, pVar, reduction, verbose)
+      trainNode(c, dataSubset, pVar, reduction, verbose, modelName)
       
     }
     
@@ -142,8 +142,25 @@ predictNode <- function(tree, template, newData, recompute_alignment){
 # small test seuratobject (downsampled 68k)
 # data <- readRDS('../68K/68k_corr.RDS')
 # data <- readRDS("../immune_prediction/results/2020-04-14_68k_annotation/68k_annotated.RDS")
-reference <- readRDS('../citeseq/5k_v3_aligned2.RDS')
-new <- readRDS('../citeseq/5k_v3_nextgem_aligned2.RDS')
+# reference <- readRDS('../citeseq/5k_v3_aligned2.RDS')
+# new <- readRDS('../citeseq/5k_v3_nextgem_aligned2.RDS')
+
+reference <- readRDS('../citeseq/5k_v3.RDS')
+new <- readRDS('../citeseq/5k_v3_nextgem.RDS')
+
+xx <- reference$cell_type == 'NC/Int Monocyte'
+reference$cell_type[xx] <- 'NC-Int Monocyte'
+
+xx <- new$cell_type == 'NC/Int Monocyte'
+new$cell_type[xx] <- 'NC-Int Monocyte'
+
+xx <- reference$cell_type != 'CD3+ CD14+ cell'
+reference <- reference[,xx]
+
+xx <- new$cell_type != 'CD3+ CD14+ cell'
+new <- new[,xx]
+
+
 
 # set.seed(66)
 # i <- sample(seq_len(nrow(data)), size = 3000)
@@ -177,10 +194,12 @@ hier <- c("pbmc/Myeloid/DC/cDC",
 
 h <- createTree(hier)
 
-# DefaultAssay(data) <- "RNA"
+# DefaultAssay(reference) <- "RNA"
 
 # 'train' the tree 
-tree <- trainTree(h, reference, pVar = 'labels')
+tree <- trainTree(h, reference, pVar = 'cell_type', model = "svmPoly")
 
 
 predictions <- predictTree(h, 0, new, recompute_alignment = TRUE)
+
+sum(predictions$scpred_prediction == new$cell_type)/length(predictions$scpred_prediction)
