@@ -23,7 +23,7 @@ svmGrid <- function(x, y, len = NULL, search = "grid") {
   if(search == "grid") {
     out <- expand.grid(sigma = mean(as.vector(sigmas[-2])),
                        C = 2 ^((1:len) - 3), 
-                       nu = seq(from = 0.1, to = 0.3, by = (0.3-0.1)/(len-1)))
+                       nu = seq(from = 0.05, to = 0.2, by = (0.2-0.05)/(len-1)))
   } else {
     ## For random search, define ranges for the parameters then
     ## generate random values for them
