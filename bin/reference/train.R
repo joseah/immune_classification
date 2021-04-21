@@ -26,11 +26,11 @@ output <- set_output("2021-04-22", "hierchical_training")
 #   Import data                                                             ####
 
 
-
+inicio("Read reference")
 ref <- readRDS(here("results",
                      "2021-04-12_azimuth_reference_integration",
                      "integrated.RDS"))
-
+fin()
 
 h <- c("pbmc/nonNKT/Myeloid/DC/ncDC/pDC",
        "pbmc/nonNKT/Myeloid/DC/ncDC/ASDC",
@@ -65,7 +65,7 @@ h <- c("pbmc/nonNKT/Myeloid/DC/ncDC/pDC",
        "pbmc/NKT/T Naive-CM-EM/Naive-Treg-dnT/CD4 Naive")
 
 
-hier <- create_hierarchy(h2)
+hier <- create_hierarchy(h)
 hier <- train_tree(ref, hier, pvar = 'celltype.l2', reconstruction_error = FALSE)
 
 
