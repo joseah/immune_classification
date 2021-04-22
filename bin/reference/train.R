@@ -32,10 +32,10 @@ ref <- readRDS(here("results",
                      "integrated.RDS"))
 fin()
 
-h <- c("pbmc/nonNKT/Myeloid/DC/ncDC/pDC",
-       "pbmc/nonNKT/Myeloid/DC/ncDC/ASDC",
-       "pbmc/nonNKT/Myeloid/DC/cDC/cDC1",
-       "pbmc/nonNKT/Myeloid/DC/cDC/cDC2",
+h <- c("pbmc/nonNKT/DC/ncDC/pDC",
+       "pbmc/nonNKT/DC/ncDC/ASDC",
+       "pbmc/nonNKT/DC/cDC/cDC1",
+       "pbmc/nonNKT/DC/cDC/cDC2",
        "pbmc/nonNKT/HSPC-Platelet-Eryth/HSPC",
        "pbmc/nonNKT/HSPC-Platelet-Eryth/Platelet",
        "pbmc/nonNKT/HSPC-Platelet-Eryth/Eryth",
@@ -66,7 +66,17 @@ h <- c("pbmc/nonNKT/Myeloid/DC/ncDC/pDC",
 
 
 hier <- create_hierarchy(h)
-hier <- train_tree(ref, hier, pvar = 'celltype.l2', reconstruction_error = FALSE)
+
+cl <- makePSOCKcluster(6)
+registerDoParallel(cl)
+
+hier <- train_tree(ref, 
+                   hier, 
+                   pvar = 'celltype.l2', 
+                   model = "mda", 
+                   reconstruction_error = FALSE)
+stopCluster(cl)
+
 
 
 #   ____________________________________________________________________________
