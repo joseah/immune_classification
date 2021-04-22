@@ -16,6 +16,7 @@ library("dsLib")
 # Secondary
 library("Seurat")
 library("HierscPred")
+library("doParallel")
 
 #   ____________________________________________________________________________
 #   Set output                                                              ####
